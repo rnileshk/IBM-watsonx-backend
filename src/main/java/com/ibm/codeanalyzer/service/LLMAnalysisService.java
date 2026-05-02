@@ -8,6 +8,7 @@ import com.ibm.codeanalyzer.model.Finding;
 import com.ibm.codeanalyzer.model.Finding.Category;
 import com.ibm.codeanalyzer.model.Finding.Severity;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -37,9 +38,18 @@ import java.util.*;
 @Service
 public class LLMAnalysisService {
 
-    private final WebClient anthropicClient;
-    private final WebClient openaiClient;
-    private final WebClient watsonxClient;
+    @Autowired(required = false)
+    @Qualifier("anthropicClient")
+    private WebClient anthropicClient;
+
+    @Autowired(required = false)
+    @Qualifier("openaiClient")
+    private WebClient openaiClient;
+
+    @Autowired(required = false)
+    @Qualifier("watsonxClient")
+    private WebClient watsonxClient;
+
     private final ObjectMapper objectMapper;
 
     @Value("${llm.provider:anthropic}")
@@ -63,15 +73,8 @@ public class LLMAnalysisService {
     @Value("${llm.anthropic.model:claude-sonnet-4-20250514}")
     private String anthropicModel;
 
-    public LLMAnalysisService(
-            @Qualifier("anthropicClient") WebClient anthropicClient,
-            @Qualifier("openaiClient")    WebClient openaiClient,
-            @Qualifier("watsonxClient")   WebClient watsonxClient,
-            ObjectMapper objectMapper) {
-        this.anthropicClient = anthropicClient;
-        this.openaiClient    = openaiClient;
-        this.watsonxClient   = watsonxClient;
-        this.objectMapper    = objectMapper;
+    public LLMAnalysisService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 
     // ─────────────────────────────────────────────────────────────────

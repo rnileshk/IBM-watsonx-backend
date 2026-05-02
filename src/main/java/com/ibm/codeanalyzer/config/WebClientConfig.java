@@ -3,6 +3,7 @@ package com.ibm.codeanalyzer.config;
 import com.ibm.codeanalyzer.model.exception.LLMException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +25,7 @@ public class WebClientConfig {
     private int timeoutSeconds;
 
     @Bean("watsonxClient")
+    @ConditionalOnProperty(name = "llm.provider", havingValue = "watsonx")
     public WebClient watsonxClient(
             @Value("${llm.watsonx.api-url}") String baseUrl,
             @Value("${llm.watsonx.api-key}") String apiKey) {
@@ -48,6 +50,7 @@ public class WebClientConfig {
     }
 
     @Bean("openaiClient")
+    @ConditionalOnProperty(name = "llm.provider", havingValue = "openai")
     public WebClient openaiClient(
             @Value("${llm.openai.api-url}") String baseUrl,
             @Value("${llm.openai.api-key}") String apiKey) {
@@ -72,6 +75,7 @@ public class WebClientConfig {
     }
 
     @Bean("anthropicClient")
+    @ConditionalOnProperty(name = "llm.provider", havingValue = "anthropic")
     public WebClient anthropicClient(
             @Value("${llm.anthropic.api-url}") String baseUrl,
             @Value("${llm.anthropic.api-key}") String apiKey) {

@@ -22,24 +22,25 @@ import java.util.UUID;
 /**
  * REST API — Code Analyzer
  *
- * POST /api/v1/analyze/url        — analyze a public Git repository
- * POST /api/v1/analyze/code       — analyze raw pasted code
- * POST /api/v1/analyze/upload     — analyze an uploaded .zip or .java file
- * GET  /api/v1/analyze/{jobId}    — poll analysis status / retrieve results
- * GET  /api/v1/analyze/jobs       — list all job IDs
- * GET  /api/v1/health             — liveness probe
+ * POST /api/analyze/git           — analyze a public Git repository
+ * POST /api/analyze/raw           — analyze raw pasted code
+ * POST /api/analyze/upload        — analyze an uploaded .zip or .java file
+ * GET  /api/analyze/result/{jobId} — retrieve analysis results
+ * GET  /api/analyze/status/{jobId} — poll analysis status
+ * POST /api/analyze/cancel/{jobId} — cancel a running job
+ * GET  /api/health                — liveness probe
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api")
 @RequiredArgsConstructor
 public class AnalysisController {
 
     private final IngestionService     ingestionService;
     private final AnalysisOrchestrator orchestrator;
 
-    // ── POST /api/v1/analyze/url ──────────────────────────────────────
-    @PostMapping("/analyze/url")
+    // ── POST /api/analyze/git ──────────────────────────────────────
+    @PostMapping("/analyze/git")
     public ResponseEntity<Map<String, String>> analyzeGitRepo(
             @RequestBody @Valid GitUrlRequest req) {
 
@@ -58,11 +59,11 @@ public class AnalysisController {
 
         return ResponseEntity.accepted()
                 .body(Map.of("jobId", jobId, "status", "RUNNING",
-                        "poll", "/api/v1/analyze/" + jobId));
+                        "poll", "/api/analyze/status/" + jobId));
     }
 
-    // ── POST /api/v1/analyze/code ─────────────────────────────────────
-    @PostMapping("/analyze/code")
+    // ── POST /api/analyze/raw ─────────────────────────────────────────
+    @PostMapping("/analyze/raw")
     public ResponseEntity<Map<String, String>> analyzeRawCode(
             @RequestBody @Valid RawCodeRequest req) {
 
@@ -81,10 +82,10 @@ public class AnalysisController {
 
         return ResponseEntity.accepted()
                 .body(Map.of("jobId", jobId, "status", "RUNNING",
-                        "poll", "/api/v1/analyze/" + jobId));
+                        "poll", "/api/analyze/status/" + jobId));
     }
 
-    // ── POST /api/v1/analyze/upload ───────────────────────────────────
+    // ── POST /api/analyze/upload ───────────────────────────────────
     @PostMapping(value = "/analyze/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<Map<String, String>> analyzeUpload(
             @RequestPart("file") MultipartFile file,
@@ -104,24 +105,36 @@ public class AnalysisController {
 
         return ResponseEntity.accepted()
                 .body(Map.of("jobId", jobId, "status", "RUNNING",
-                        "poll", "/api/v1/analyze/" + jobId));
+                        "poll", "/api/analyze/status/" + jobId));
     }
 
-    // ── GET /api/v1/analyze/{jobId} ───────────────────────────────────
-    @GetMapping("/analyze/{jobId}")
+    // ── GET /api/analyze/result/{jobId} ───────────────────────────────
+    @GetMapping("/analyze/result/{jobId}")
     public ResponseEntity<AnalysisResult> getResult(@PathVariable String jobId) {
         return orchestrator.getResult(jobId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // ── GET /api/v1/analyze/jobs ──────────────────────────────────────
-    @GetMapping("/analyze/jobs")
-    public ResponseEntity<List<String>> listJobs() {
-        return ResponseEntity.ok(orchestrator.listJobs());
+    // ── GET /api/analyze/status/{jobId} ───────────────────────────────
+    @GetMapping("/analyze/status/{jobId}")
+    public ResponseEntity<Map<String, String>> getStatus(@PathVariable String jobId) {
+        return orchestrator.getResult(jobId)
+                .map(result -> ResponseEntity.ok(Map.of(
+                        "jobId", jobId,
+                        "status", result.getStatus().toString()
+                )))
+                .orElse(ResponseEntity.notFound().build());
     }
 
-    // ── GET /api/v1/health ────────────────────────────────────────────
+    // ── POST /api/analyze/cancel/{jobId} ──────────────────────────────
+    @PostMapping("/analyze/cancel/{jobId}")
+    public ResponseEntity<Map<String, String>> cancelJob(@PathVariable String jobId) {
+        // TODO: Implement job cancellation logic
+        return ResponseEntity.ok(Map.of("jobId", jobId, "status", "CANCELLED"));
+    }
+
+    // ── GET /api/health ────────────────────────────────────────────────
     @GetMapping("/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of("status", "UP", "service", "IBM Code Analyzer"));

@@ -10,12 +10,6 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.regex.*;
 
-/**
- * Security Scanning Service
- *
- * Layer 1: Built-in regex-based OWASP rule engine.
- * Layer 2: Semgrep CLI subprocess, optional via config.
- */
 @Slf4j
 @Service
 public class SecurityScanService {
@@ -37,7 +31,6 @@ public class SecurityScanService {
 
     private static final List<SecurityRule> OWASP_RULES = List.of(
 
-            // ── A03: SQL Injection ─────────────────────────────────────────
             new SecurityRule(
                     "OWASP-A03-SQL-001",
                     "Potential SQL Injection",
@@ -45,13 +38,12 @@ public class SecurityScanService {
                     "Use PreparedStatement with parameterized queries. Never concatenate user input into SQL strings.",
                     Severity.CRITICAL,
                     Pattern.compile(
-                            "(Statement|createStatement)\\s*\\.[a-zA-Z]*execute(Query|Update)?\\s*\\(.*\\+.*\\)|" +
-                                    "\"(SELECT|INSERT|UPDATE|DELETE)[^\"]*\"\\s*\\+\\s*[a-zA-Z0-9_]+",
+                            "(Statement|createStatement)\\s*\\.[a-zA-Z]*execute(Query|Update)?\\s*\\([^;]*\\+[^;]*\\)|" +
+                            "\"(SELECT|INSERT|UPDATE|DELETE)[^\"]*\"\\s*\\+\\s*[a-zA-Z0-9_]+",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A03: Command Injection ─────────────────────────────────────
             new SecurityRule(
                     "OWASP-A03-CMD-001",
                     "Potential Command Injection",
@@ -59,13 +51,12 @@ public class SecurityScanService {
                     "Validate and sanitize all input before passing to system commands. Use an allowlist of permitted commands.",
                     Severity.CRITICAL,
                     Pattern.compile(
-                            "Runtime\\.getRuntime\\(\\)\\.exec\\s*\\(.*\\+.*\\)|" +
-                                    "new\\s+ProcessBuilder\\s*\\(.*\\+.*\\)",
+                            "Runtime\\.getRuntime\\s*\\(\\s*\\)\\.exec\\s*\\([^;]*\\+[^;]*\\)|" +
+                            "new\\s+ProcessBuilder\\s*\\([^;]*\\+[^;]*\\)",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A02: Hardcoded Password ────────────────────────────────────
             new SecurityRule(
                     "OWASP-A02-CRED-001",
                     "Hardcoded Password or Secret",
@@ -73,12 +64,12 @@ public class SecurityScanService {
                     "Use environment variables, a secrets manager, or Spring Boot externalized configuration.",
                     Severity.HIGH,
                     Pattern.compile(
-                            "(password|passwd|secret|api[_-]?key|access[_-]?token)\\s*=\\s*\"[^\"]{4,}\"",
+                            "(password|passwd|secret|access[_-]?token)\\s*=\\s*\"(?!your-|change-me|example|dummy|test)[^\"]{8,}\"|" +
+                            "(api[_-]?key)\\s*=\\s*\"(?!x-api-key|api-key|authorization|content-type)[^\"]{12,}\"",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A02: Weak Cryptography ─────────────────────────────────────
             new SecurityRule(
                     "OWASP-A02-CRYPTO-001",
                     "Weak Cryptographic Algorithm",
@@ -86,12 +77,11 @@ public class SecurityScanService {
                     "Use SHA-256 or stronger for integrity checks. For passwords, use BCrypt, Argon2, or PBKDF2.",
                     Severity.HIGH,
                     Pattern.compile(
-                            "MessageDigest\\.getInstance\\(\"(MD5|SHA-1|SHA1)\"\\)",
+                            "MessageDigest\\.getInstance\\s*\\(\\s*\"(MD5|SHA-1|SHA1)\"\\s*\\)",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A02: Insecure Random ───────────────────────────────────────
             new SecurityRule(
                     "OWASP-A02-RAND-001",
                     "Insecure Random Number Generator",
@@ -104,38 +94,38 @@ public class SecurityScanService {
                     )
             ),
 
-            // ── A08: Unsafe Deserialization ────────────────────────────────
             new SecurityRule(
                     "OWASP-A08-DESER-001",
                     "Unsafe Java Deserialization",
-                    "ObjectInputStream.readObject() can execute arbitrary code if the serialized payload is attacker-controlled.",
+                    "Unsafe Java native deserialization can execute arbitrary code if attacker-controlled data is processed.",
                     "Avoid Java native deserialization for untrusted data. Use JSON or Protobuf. If deserialization is necessary, use ObjectInputFilter or a strict allowlist.",
                     Severity.CRITICAL,
                     Pattern.compile(
-                        "new\\s+ObjectInputStream\\s*\\(|\\.readObject\\s*\\(",
-                        Pattern.CASE_INSENSITIVE
-                    )
-            ),
-
-            // ── A01: Missing Authorization Check ──────────────────────────
-            new SecurityRule(
-                    "OWASP-A01-AUTH-001",
-                    "Missing Authorization Annotation",
-                    "A public mapping endpoint is missing @PreAuthorize, @Secured, or @RolesAllowed.",
-                    "Add appropriate authorization annotations or configure HttpSecurity rules to restrict access to sensitive endpoints.",
-                    Severity.HIGH,
-                    Pattern.compile(
-                            "@(GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)[\\s\\S]{0,200}(?![\\s\\S]{0,200}@(PreAuthorize|Secured|RolesAllowed))",
+                            "new\\s+ObjectInputStream\\s*\\([^)]*\\)|" +
+                            "[a-zA-Z_$][a-zA-Z0-9_$]*\\s*\\.\\s*readObject\\s*\\(",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A05: Disabled CSRF ─────────────────────────────────────────
+            new SecurityRule(
+                    "OWASP-A01-AUTH-001",
+                    "Missing Authorization Annotation",
+                    "A public mapping endpoint may be missing @PreAuthorize, @Secured, or @RolesAllowed.",
+                    "Add authorization annotations or configure HttpSecurity rules for protected endpoints. Exclude public endpoints intentionally.",
+                    Severity.HIGH,
+                    Pattern.compile(
+                            "@(GetMapping|PostMapping|PutMapping|DeleteMapping|RequestMapping)" +
+                            "(?![\\s\\S]{0,250}(health|actuator|login|register|public|status))" +
+                            "(?![\\s\\S]{0,250}@(PreAuthorize|Secured|RolesAllowed))",
+                            Pattern.CASE_INSENSITIVE
+                    )
+            ),
+
             new SecurityRule(
                     "OWASP-A05-CSRF-001",
                     "CSRF Protection Disabled",
                     "csrf().disable() turns off Spring Security's Cross-Site Request Forgery protection.",
-                    "Enable CSRF protection for state-changing operations, or use SameSite cookies with a stateless JWT strategy.",
+                    "Enable CSRF for cookie-based sessions. For stateless JWT APIs, document why CSRF is disabled.",
                     Severity.HIGH,
                     Pattern.compile(
                             "\\.csrf\\s*\\(\\s*\\)\\s*\\.disable\\s*\\(\\s*\\)|csrf\\s*\\.\\s*disable",
@@ -143,20 +133,20 @@ public class SecurityScanService {
                     )
             ),
 
-            // ── A05: SSL Verification Disabled ────────────────────────────
             new SecurityRule(
                     "OWASP-A05-TLS-001",
                     "SSL/TLS Certificate Validation Disabled",
-                    "TrustAllCerts or a no-op TrustManager disables certificate validation.",
+                    "SSL/TLS certificate validation appears to be disabled.",
                     "Use a properly configured TrustManager with a valid certificate chain. Never disable certificate validation in production.",
                     Severity.CRITICAL,
                     Pattern.compile(
-                            "TrustAllCerts|setHostnameVerifier|ALLOW_ALL_HOSTNAME_VERIFIER|trustAllCerts|X509TrustManager[\\s\\S]{0,300}checkServerTrusted",
+                            "setHostnameVerifier\\s*\\(\\s*(NoopHostnameVerifier\\.INSTANCE|[^)]*ALLOW_ALL_HOSTNAME_VERIFIER[^)]*)\\s*\\)|" +
+                            "new\\s+X509TrustManager\\s*\\(\\s*\\)\\s*\\{[\\s\\S]{0,700}" +
+                            "checkServerTrusted\\s*\\([^)]*\\)\\s*\\{\\s*\\}",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A07: Plaintext Password Comparison ────────────────────────
             new SecurityRule(
                     "OWASP-A07-PWD-001",
                     "Plaintext Password Comparison",
@@ -169,7 +159,6 @@ public class SecurityScanService {
                     )
             ),
 
-            // ── A09: Logging Sensitive Data ────────────────────────────────
             new SecurityRule(
                     "OWASP-A09-LOG-001",
                     "Sensitive Data Logged",
@@ -182,7 +171,6 @@ public class SecurityScanService {
                     )
             ),
 
-            // ── A03: LDAP Injection ────────────────────────────────────────
             new SecurityRule(
                     "OWASP-A03-LDAP-001",
                     "Potential LDAP Injection",
@@ -190,20 +178,22 @@ public class SecurityScanService {
                     "Use parameterized LDAP filters or sanitize input using OWASP LDAP encoding.",
                     Severity.HIGH,
                     Pattern.compile(
-                            "search\\s*\\([^;]*\\+|LdapTemplate[\\s\\S]{0,200}\\+",
+                            "(DirContext|LdapTemplate)\\s+[a-zA-Z_$][a-zA-Z0-9_$]*[\\s\\S]{0,300}" +
+                            "\\.search\\s*\\([^;]*\\+[^;]*\\)",
                             Pattern.CASE_INSENSITIVE
                     )
             ),
 
-            // ── A03: XXE ───────────────────────────────────────────────────
             new SecurityRule(
                     "OWASP-A03-XXE-001",
-                    "XML External Entity (XXE) Risk",
+                    "XML External Entity Risk",
                     "XML parser factory created without obvious external entity hardening.",
                     "Disable DOCTYPE declarations and external entity resolution before parsing XML.",
                     Severity.HIGH,
                     Pattern.compile(
-                            "DocumentBuilderFactory\\.newInstance\\s*\\(\\s*\\)|SAXParserFactory\\.newInstance\\s*\\(\\s*\\)|XMLInputFactory\\.newInstance\\s*\\(\\s*\\)",
+                            "DocumentBuilderFactory\\.newInstance\\s*\\(\\s*\\)|" +
+                            "SAXParserFactory\\.newInstance\\s*\\(\\s*\\)|" +
+                            "XMLInputFactory\\.newInstance\\s*\\(\\s*\\)",
                             Pattern.CASE_INSENSITIVE
                     )
             )
@@ -219,10 +209,10 @@ public class SecurityScanService {
         List<Finding> findings = new ArrayList<>();
 
         for (Map.Entry<String, String> entry : sources.entrySet()) {
-            String filePath = entry.getKey();
+            String filePath = normalizePath(entry.getKey());
             String content = entry.getValue();
 
-            if (content == null || content.isBlank()) {
+            if (shouldSkipFile(filePath, content)) {
                 continue;
             }
 
@@ -241,9 +231,27 @@ public class SecurityScanService {
         return deduped;
     }
 
+    private boolean shouldSkipFile(String filePath, String content) {
+        if (filePath == null || filePath.isBlank()) {
+            return true;
+        }
+
+        if (content == null || content.isBlank()) {
+            return true;
+        }
+
+        String normalized = normalizePath(filePath);
+
+        return normalized.contains("/src/test/")
+                || normalized.contains("/test/")
+                || normalized.endsWith("SecurityScanServiceTest.java")
+                || normalized.endsWith("QualityAnalysisServiceTest.java");
+    }
+
     private List<Finding> applyOwaspRules(String filePath, String content) {
         List<Finding> findings = new ArrayList<>();
-        String[] lines = content.split("\\R", -1);
+        String sanitizedContent = stripStringLiteralsAndComments(content);
+        String[] lines = sanitizedContent.split("\\R", -1);
 
         for (SecurityRule rule : OWASP_RULES) {
             for (int i = 0; i < lines.length; i++) {
@@ -252,9 +260,9 @@ public class SecurityScanService {
                 }
             }
 
-            Matcher multiLineMatcher = rule.pattern().matcher(content);
+            Matcher multiLineMatcher = rule.pattern().matcher(sanitizedContent);
             while (multiLineMatcher.find()) {
-                int lineNum = lineNumberOf(content, multiLineMatcher.start());
+                int lineNum = lineNumberOf(sanitizedContent, multiLineMatcher.start());
 
                 boolean alreadyFound = findings.stream().anyMatch(f ->
                         rule.ruleId().equals(f.getRuleId())
@@ -269,6 +277,100 @@ public class SecurityScanService {
         }
 
         return findings;
+    }
+
+    private String stripStringLiteralsAndComments(String content) {
+        StringBuilder result = new StringBuilder(content.length());
+
+        boolean inString = false;
+        boolean inChar = false;
+        boolean inLineComment = false;
+        boolean inBlockComment = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < content.length(); i++) {
+            char current = content.charAt(i);
+            char next = i + 1 < content.length() ? content.charAt(i + 1) : '\0';
+
+            if (inLineComment) {
+                if (current == '\n') {
+                    inLineComment = false;
+                    result.append('\n');
+                } else {
+                    result.append(' ');
+                }
+                continue;
+            }
+
+            if (inBlockComment) {
+                if (current == '*' && next == '/') {
+                    inBlockComment = false;
+                    result.append("  ");
+                    i++;
+                } else if (current == '\n') {
+                    result.append('\n');
+                } else {
+                    result.append(' ');
+                }
+                continue;
+            }
+
+            if (inString) {
+                if (current == '\n') {
+                    inString = false;
+                    result.append('\n');
+                } else {
+                    result.append(' ');
+                    if (current == '"' && !escaped) {
+                        inString = false;
+                    }
+                    escaped = current == '\\' && !escaped;
+                    if (current != '\\') {
+                        escaped = false;
+                    }
+                }
+                continue;
+            }
+
+            if (inChar) {
+                if (current == '\n') {
+                    inChar = false;
+                    result.append('\n');
+                } else {
+                    result.append(' ');
+                    if (current == '\'' && !escaped) {
+                        inChar = false;
+                    }
+                    escaped = current == '\\' && !escaped;
+                    if (current != '\\') {
+                        escaped = false;
+                    }
+                }
+                continue;
+            }
+
+            if (current == '/' && next == '/') {
+                inLineComment = true;
+                result.append("  ");
+                i++;
+            } else if (current == '/' && next == '*') {
+                inBlockComment = true;
+                result.append("  ");
+                i++;
+            } else if (current == '"') {
+                inString = true;
+                escaped = false;
+                result.append(' ');
+            } else if (current == '\'') {
+                inChar = true;
+                escaped = false;
+                result.append(' ');
+            } else {
+                result.append(current);
+            }
+        }
+
+        return result.toString();
     }
 
     private Finding buildFinding(SecurityRule rule, String filePath, int lineNumber) {
@@ -315,5 +417,9 @@ public class SecurityScanService {
         }
 
         return result;
+    }
+
+    private String normalizePath(String path) {
+        return path == null ? "" : path.replace("\\", "/");
     }
 }

@@ -112,8 +112,8 @@ public class SecurityScanService {
                     "Avoid Java native deserialization for untrusted data. Use JSON or Protobuf. If deserialization is necessary, use ObjectInputFilter or a strict allowlist.",
                     Severity.CRITICAL,
                     Pattern.compile(
-                            "new\\s+ObjectInputStream\\s*\\(|\\.readObject\\s*\\(",
-                            Pattern.CASE_INSENSITIVE
+                        "new\\s+ObjectInputStream\\s*\\(|\\.readObject\\s*\\(",
+                        Pattern.CASE_INSENSITIVE
                     )
             ),
 
